@@ -138,13 +138,13 @@ proof -
   ultimately show ?thesis by simp
 qed
 
-lemma list_segment_iso: 
-  "\<lbrakk>list_segment h1 l1 l2 n; iso_fun' f (s,h1) (s',h2)\<rbrakk> \<Longrightarrow> list_segment h2 (f l1) (f l2) n"
-proof (induction n arbitrary: l1 l2 h1 h2 rule: list_segment.induct)
+(* lemma list_segment_iso: 
+  "\<lbrakk>list_segment n h1 l1 l2; iso_fun' f (s,h1) (s',h2)\<rbrakk> \<Longrightarrow> list_segment n h2 (f l1) (f l2)"
+proof (induction n h1 l1 l2 rule: list_segment.induct)
   case (1 uu uv uw)
   then show ?case by auto
 next
-  case (2 h l1 l2)
+  case (2 h1 l1 l2)
   then have h1: "h1 = [l1\<mapsto>l2]" by auto
   from 2(2) have "Map.graph h2 = (\<lambda>(l,r). (f l,f r))`Map.graph h1" by simp
   from graph_dom_ran[OF this] have "dom h2 = f`dom h1" "ran h2 = f`ran h1" by simp_all
@@ -152,8 +152,8 @@ next
     by (metis dom_eq_singleton_conv insertCI ran_map_upd singleton_iff)
   then show ?case by auto
 next
-  case (3 h l1 l2 n)
-  then obtain h' l1' where h': "h1=h'++[l1\<mapsto>l1']" "list_segment h' l1' l2 (Suc n)" "l1 \<notin> dom h'" by auto
+  case (3 n h1 l1 l2)
+  then obtain h' l1' where h': "h1=h'++[l1\<mapsto>l1']" "list_segment (Suc n) h' l1' l2" "l1 \<notin> dom h'" by auto
   define h'' where h'': "h'' = h2(f l1 := None)"
   with h'(3) have doms: "dom h'' \<inter> dom [f l1 \<mapsto> f l1'] = {}" "dom h' \<inter> dom [l1 \<mapsto>l1'] = {}" by auto
   from h'(1) have "h1 l1 = Some l1'" by simp
@@ -192,7 +192,7 @@ next
   from doms 3(1)[OF h'(2) this] have "list_segment h2 (f l1) (f l2) (Suc (Suc n))"
     by (auto simp: h2)
   then show ?case .
-qed
+qed *)
 
 lemma iso_split: "\<lbrakk>m1\<cong>m2; heap m1=h; stack m1 = s; stack m2 = s'; heap m2=h'; h1 \<uplus>\<^sup>s h2=Some h\<rbrakk> \<Longrightarrow>
   \<exists>h1' h2'. heap_union h1' s' h2'=Some h' \<and> Abs_model (s,h1) \<cong> Abs_model (s',h1') \<and> Abs_model (s,h2) \<cong> Abs_model (s',h2')"
@@ -297,7 +297,7 @@ next
   ultimately show ?case by transfer auto
 next
   case (LS x)
-  obtain y z where x: "x=(y,z)" by force
+  (* obtain y z where x: "x=(y,z)" by force
   obtain s h s' h' where m1: "heap m1 = h" "stack m1 = s" and m2: "heap m2 = h'" "stack m2 = s'" 
     by auto
   then have m12: "Rep_model m1 = (s,h)" "Rep_model m2 = (s',h')" by (transfer, auto)+
@@ -320,7 +320,7 @@ next
     with s'_y_z have "satisfies (s',h') (LS (y,z))" by auto
     with m12(2) x have "m2 \<Turnstile> LS x" by (auto simp: satisfies_model.rep_eq)
   }
-  ultimately show ?case using ls_sat(3) by auto
+  ultimately show ?case using ls_sat(3) by auto *) show ?case sorry
 next
   case (Eq x1 x2)
   with iso_heap_emp[OF this(1)] show ?case by transfer auto
