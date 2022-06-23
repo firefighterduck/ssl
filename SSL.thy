@@ -144,7 +144,7 @@ subsection \<open>Semantics\<close>
 fun list_segment :: "nat \<Rightarrow> heap \<Rightarrow> loc \<Rightarrow> loc \<Rightarrow> bool" where
   "list_segment 0 _ _ _ = False"
 | "list_segment (Suc 0) h l1 l2 = (h = [l1\<mapsto>l2])"
-| "list_segment (Suc n) h l1 l2 = (\<exists>h' l1'. h=h'++[l1\<mapsto>l1'] \<and> list_segment n h' l1' l2)"
+| "list_segment (Suc n) h l1 l2 = (\<exists>h' l1'. h=h'++[l1\<mapsto>l1'] \<and> l1\<notin>dom h' \<and> list_segment n h' l1' l2)"
 
 fun satisfies :: "(stack\<times>heap) \<Rightarrow> form \<Rightarrow> bool" where
   "satisfies (s,h) Emp = (dom h = {})"
@@ -194,49 +194,48 @@ fun positive :: "form \<Rightarrow> bool" where
 | "positive (\<not>\<^sub>s _) = False"
 | "positive _ = True"
 
-subsection \<open>Disproof of stronger statement of lemma 2.5\<close>
-lemma counter1: "
-  weak_satisfies ([Var 0 \<mapsto> 0, Var 2 \<mapsto> 2, Nil \<mapsto> 3], [0\<mapsto>1,1\<mapsto>2,2\<mapsto>1]) (LS (Var 0,Var 2))"
-  (is "weak_satisfies (?s,?h) _")
-proof -
-  have "list_segment 1 [1\<mapsto>2] 1 2" by simp
-  moreover have "[1::nat\<mapsto>2::nat,2\<mapsto>1] = [1\<mapsto>2]++[2\<mapsto>1]" by auto
-  ultimately have "\<exists>h' l1'. [1\<mapsto>2,2\<mapsto>1]=h'++[2\<mapsto>l1'] \<and> list_segment 1 h' l1' 2" by auto
-  then have "list_segment (Suc 1) [1\<mapsto>2,2\<mapsto>1] 2 2" by simp
-  moreover have "[1::nat\<mapsto>2::nat,2\<mapsto>1] = [1\<mapsto>2,2\<mapsto>1]++[1\<mapsto>2]" by auto
-  ultimately have "\<exists>h' l1'. [1\<mapsto>2,2\<mapsto>1]=h'++[1\<mapsto>l1'] \<and> list_segment (Suc 1) h' l1' 2" by blast
-  then have "list_segment (Suc (Suc 1)) [1\<mapsto>2,2\<mapsto>1] 1 2" by simp
-  moreover have "[0::nat\<mapsto>1::nat,1\<mapsto>2,2\<mapsto>1] = [1\<mapsto>2,2\<mapsto>1]++[0\<mapsto>1]" by auto
-  ultimately have "\<exists>h' l1'. ?h=h'++[0\<mapsto>l1'] \<and> list_segment (Suc (Suc 1)) h' l1' 2" by blast
-  then have "list_segment (Suc (Suc (Suc 1))) ?h 0 2" by simp
-  then have "?s (Var 0) = Some 0 \<and> ?s (Var 2) = Some 2 \<and> ((dom ?h = {} \<and> 0=2) \<or> (\<exists>n. list_segment n ?h 0 2))"
-    by fastforce
-  then have "\<exists>l0 l2. ?s (Var 0) = Some l0 \<and> ?s (Var 2) = Some l2 \<and> ((dom ?h = {} \<and> l0=l2) 
-    \<or> (\<exists>n. list_segment n ?h l0 l2))" by simp
-  then show ?thesis by simp
+lemma list_segment_semantics: "list_segment n h l1 l2 \<Longrightarrow> l1 \<in> dom h \<and> l2 \<in> ran h \<and> 
+    (\<forall>l. (\<exists>x y. x\<noteq>y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l=l2)
+    \<and> ran h - dom h \<subseteq> {l2} \<and> dom h - ran h \<subseteq> {l1}
+    \<and> (l1\<in>ran h \<longrightarrow> l1=l2)"
+proof (induction n h l1 l2 rule: list_segment.induct)
+  case (1 uu uv uw)
+  then show ?case by simp
+next
+  case (2 h l1 l2)
+  then have "h = [l1\<mapsto>l2]" by simp
+  then show ?case by (auto simp: ran_def)
+next
+  case (3 v h l1 l2)
+  then obtain h' l1' where h': "h=h'++[l1\<mapsto>l1']" "l1 \<notin> dom h'" "list_segment (Suc v) h' l1' l2" 
+    by auto
+  from h'(1,2) have dom_ran: "dom h = dom h' \<union> {l1}" "ran h = ran h' \<union> {l1'}" by auto
+  {
+    fix l
+    assume "(\<exists>x y. x \<noteq> y \<and> h x = Some l \<and> h y = Some l)"
+    then obtain x y where xy: "x \<noteq> y \<and> h x = Some l \<and> h y = Some l" by auto
+    with 3(1)[OF h'(3)] h'(1,2) have "x \<in> dom h' \<and> y \<in> dom h' \<Longrightarrow> h' x = Some l \<and> h' y = Some l" 
+      by (metis fun_upd_apply map_add_empty map_add_upd)
+    with 3(1)[OF h'(3)] xy have both: "x \<in> dom h' \<and> y \<in> dom h' \<Longrightarrow> l = l2" by auto
+    from xy 3(1)[OF h'(3)] h'(1,2) have l_l1':"\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l = l1'"
+      by auto (metis option.inject)+
+    moreover from xy h'(1) have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> x\<in>dom h' \<or>y\<in>dom h'" 
+      apply auto apply (metis option.distinct(1)) by (metis option.distinct(1))
+    ultimately have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l1' \<in> ran h'" using xy h'(1) apply auto
+      apply (smt (verit, best)  map_add_empty map_add_upd map_upd_Some_unfold ranI) by (metis ranI)
+    with 3(1)[OF h'(3)] have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l1' = l2" by simp
+    with l_l1' have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l=l2" by simp
+    with both have "l=l2" by auto
+  }  
+  then have "\<forall>l. (\<exists>x y. x \<noteq> y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l = l2" by simp
+  moreover from dom_ran 3(1)[OF h'(3)] have "l1 \<in> dom h" "l2 \<in> ran h" by auto
+  moreover from dom_ran 3(1)[OF h'(3)] have "ran h - dom h \<subseteq> {l2}" by auto
+  moreover from dom_ran 3(1)[OF h'(3)] have "dom h - ran h \<subseteq> {l1}" by auto
+  moreover from dom_ran 3(1)[OF h'(3)] have "l1 \<in> ran h \<longrightarrow> l1 = l2" using h'(2) by auto
+  ultimately show ?case by simp
 qed
-lemma counter2: "positive (LS (Var 0,Var 2))" by simp
-lemma counter3: "{l. [0::nat\<mapsto>1::nat,1\<mapsto>2,2\<mapsto>1] l = Some 1} = {0,2} \<and> 1 \<notin> ran [Var 0 \<mapsto> 0::nat, Var 2 \<mapsto> 2, Nil \<mapsto> 3]"
-  by auto
 
-lemma disproof: "\<not>(\<forall>\<phi> s h. (positive \<phi> \<longrightarrow>weak_satisfies (s,h) \<phi> \<longrightarrow>
-  (ran h - dom h \<subseteq> ran s) \<and> (\<forall>l. (\<exists>x y. x\<noteq>y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l \<in> ran s) \<and>
-  (dom h - ran h \<subseteq> ran s)))" (is "\<not>?P")
-proof
-  define h::heap where "h=[0 \<mapsto> 1, 1 \<mapsto> 2, 2 \<mapsto> 1]" 
-  define s::stack where "s=[Var 0 \<mapsto> 0, Var 2 \<mapsto> 2, var.Nil \<mapsto> 3]"
-  assume ?P
-  then have "positive \<phi> \<Longrightarrow> weak_satisfies (s,h) \<phi> \<Longrightarrow>
-    (ran h - dom h \<subseteq> ran s) \<and> (\<forall>l. (\<exists>x y. x\<noteq>y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l \<in> ran s) \<and>
-    (dom h - ran h \<subseteq> ran s)" for \<phi> s h by simp
-  from this[OF counter2 counter1] have "(\<forall>l. (\<exists>x y. x \<noteq> y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l \<in> ran s)" 
-    by (auto simp: h_def s_def)
-  then have "1 \<in> ran s" unfolding h_def by auto (metis fun_upd_other fun_upd_same nat.distinct(1) numeral_2_eq_2)
-  with counter3 s_def show False by simp
-qed
-    
-
-lemma 
+lemma positive_var_locations:
 assumes "positive \<phi>" "weak_satisfies (s,h) \<phi>"
 shows "(ran h - dom h \<subseteq> ran s) \<and> (\<forall>l. (\<exists>x y. x\<noteq>y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l \<in> ran s) \<and>
   (dom h - ran h \<subseteq> ran s)"
@@ -255,9 +254,18 @@ next
 next
   case (LS x)
   obtain x1 x2 where "x=(x1,x2)" by fastforce
-  with LS(2) obtain y1 y2 where "s x1 = Some y1" "s x2 = Some y2" 
-    "((dom h = {} \<and> y1=y2) \<or> (\<exists>n. n list_segment h y1 y2))" by fastforce
-  then show ?case sorry
+  with LS(2) obtain y1 y2 where y12: "s x1 = Some y1" "s x2 = Some y2" 
+    "((dom h = {} \<and> y1=y2) \<or> (\<exists>n. list_segment n h y1 y2))" by fastforce
+  moreover { 
+    assume "\<exists>n. list_segment n h y1 y2"
+    then obtain n where "list_segment n h y1 y2" by auto
+    then have "y1 \<in> dom h \<and> y2 \<in> ran h \<and> (\<forall>l. (\<exists>x y. x \<noteq> y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l = y2) 
+      \<and> ran h - dom h \<subseteq> {y2} \<and> dom h - ran h \<subseteq> {y1} \<and> (y1 \<in> ran h \<longrightarrow> y1 = y2)" using list_segment_semantics
+      by simp
+    with y12 have ?case by (auto intro: ranI)
+  } 
+  moreover have "dom h = {} \<and> y1=y2 \<Longrightarrow> ?case" by simp
+  ultimately show ?case by blast
 next
   case (Eq x1 x2)
   then have "h=Map.empty" by auto
@@ -308,40 +316,5 @@ next
   case (Neg \<phi>)
   then show ?case by simp
 qed
-
-(* lemma "list_segment n h l1 l2 \<Longrightarrow> l1 \<in> dom h \<and> l2 \<in> ran h \<and> 
-    (\<forall>l. (\<exists>x y. x\<noteq>y \<and> h x = Some l \<and> h y = Some l) \<longrightarrow> l=l2)
-    \<and> ran h - dom h \<subseteq> {l2} \<and> dom h - ran h \<subseteq> {l1}"
-proof (induction n h l1 l2 rule: list_segment.induct)
-  case (1 uu uv uw)
-  then show ?case by simp
-next
-  case (2 h l1 l2)
-  then have "h = [l1\<mapsto>l2]" by simp
-  then show ?case by (auto simp: ran_def)
-next
-  case (3 v h l1 l2)
-  then obtain h' l1' where h': "h=h'++[l1\<mapsto>l1']" "l1 \<notin> dom h'" "list_segment (Suc v) h' l1' l2" 
-    by auto
-  from h'(1,2) have dom_ran: "dom h = dom h' \<union> {l1}" "ran h = ran h' \<union> {l1'}" by auto
-  from dom_ran 3(1)[OF h'(3)] have "l1 \<in> dom h" "l2 \<in> ran h" by auto
-  moreover from dom_ran 3(1)[OF h'(3)] have "ran h - dom h \<subseteq> {l2}" by auto
-  moreover from dom_ran 3(1)[OF h'(3)] have "dom h - ran h \<subseteq> {l1}" by auto
-  moreover {
-    fix l
-    assume "(\<exists>x y. x \<noteq> y \<and> h x = Some l \<and> h y = Some l)"
-    then obtain x y where xy: "x \<noteq> y \<and> h x = Some l \<and> h y = Some l" by auto
-    with 3(1)[OF h'(3)] h'(1,2) have "x \<in> dom h' \<and> y \<in> dom h' \<Longrightarrow> h' x = Some l \<and> h' y = Some l" 
-      apply auto apply (metis option.distinct(1)) by (metis is_none_code(2) is_none_simps(1))
-    with 3(1)[OF h'(3)] xy have "x \<in> dom h' \<and> y \<in> dom h' \<Longrightarrow> l = l2" by auto
-    from xy 3(1)[OF h'(3)] h'(1,2) have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l = l1'"
-      by auto (metis option.inject)+
-    moreover from xy h'(1) have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> x\<in>dom h' \<or>y\<in>dom h'" 
-      apply auto apply (metis option.distinct(1)) by (metis option.distinct(1))
-    ultimately have "\<not>(x \<in> dom h' \<and> y \<in> dom h') \<Longrightarrow> l1' \<in> ran h'" using xy h'(1) apply auto
-      apply (smt (verit, best)  map_add_empty map_add_upd map_upd_Some_unfold ranI) by (metis ranI)
-  }
-  ultimately show ?case apply auto
-qed *)
 
 end

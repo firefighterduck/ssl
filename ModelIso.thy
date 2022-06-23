@@ -138,9 +138,9 @@ proof -
   ultimately show ?thesis by simp
 qed
 
-(* lemma list_segment_iso: 
+lemma list_segment_iso: 
   "\<lbrakk>list_segment n h1 l1 l2; iso_fun' f (s,h1) (s',h2)\<rbrakk> \<Longrightarrow> list_segment n h2 (f l1) (f l2)"
-proof (induction n h1 l1 l2 rule: list_segment.induct)
+proof (induction n h1 l1 l2 arbitrary: h2 rule: list_segment.induct)
   case (1 uu uv uw)
   then show ?case by auto
 next
@@ -189,10 +189,10 @@ next
     bij f \<and> (\<forall>x. s' x = map_option f (s x)) \<and> (Map.graph h'' = (\<lambda>(l,r). (f l, f r))`Map.graph h')"
     using 3(3) h'_h''_graph by auto
   then have "iso_fun' f (s,h') (s',h'')" by simp
-  from doms 3(1)[OF h'(2) this] have "list_segment h2 (f l1) (f l2) (Suc (Suc n))"
+  from doms 3(1)[OF h'(2) this] have "list_segment (Suc (Suc n)) h2 (f l1) (f l2)"
     by (auto simp: h2)
   then show ?case .
-qed *)
+qed
 
 lemma iso_split: "\<lbrakk>m1\<cong>m2; heap m1=h; stack m1 = s; stack m2 = s'; heap m2=h'; h1 \<uplus>\<^sup>s h2=Some h\<rbrakk> \<Longrightarrow>
   \<exists>h1' h2'. heap_union h1' s' h2'=Some h' \<and> Abs_model (s,h1) \<cong> Abs_model (s',h1') \<and> Abs_model (s,h2) \<cong> Abs_model (s',h2')"
@@ -297,13 +297,13 @@ next
   ultimately show ?case by transfer auto
 next
   case (LS x)
-  (* obtain y z where x: "x=(y,z)" by force
+  obtain y z where x: "x=(y,z)" by force
   obtain s h s' h' where m1: "heap m1 = h" "stack m1 = s" and m2: "heap m2 = h'" "stack m2 = s'" 
     by auto
   then have m12: "Rep_model m1 = (s,h)" "Rep_model m2 = (s',h')" by (transfer, auto)+
   with x LS(2) have "satisfies (s,h) (LS (y,z))" by transfer' auto
   then obtain ly lz where ls_sat: "s y = Some ly" "s z = Some lz" 
-    "((dom h = {} \<and> ly=lz) \<or> (\<exists>n. list_segment h ly lz n))" (is "?emp_ls \<or> ?seg") by auto
+    "((dom h = {} \<and> ly=lz) \<or> (\<exists>n. list_segment n h ly lz))" (is "?emp_ls \<or> ?seg") by auto
   from model_isoE'[OF LS(1)] obtain f where f: "iso_fun f m1 m2" by blast
   with ls_sat m1 m2 have s'_y_z: "s' y = Some (f ly)" "s' z = Some (f lz)" by auto
   {
@@ -313,14 +313,14 @@ next
   }
   moreover {
     assume ?seg
-    then obtain n where n: "list_segment h ly lz n" by blast
+    then obtain n where n: "list_segment n h ly lz" by blast
     from f m1 m2 have "iso_fun' f (s,h) (s',h')" by (auto simp: Map.graph_def)
-    from list_segment_iso[OF n this] have "(dom h' = {} \<and> f ly=f lz) \<or> (\<exists>n. list_segment h' (f ly) (f lz) n)"
+    from list_segment_iso[OF n this] have "(dom h' = {} \<and> f ly=f lz) \<or> (\<exists>n. list_segment n h' (f ly) (f lz))"
       by auto
     with s'_y_z have "satisfies (s',h') (LS (y,z))" by auto
     with m12(2) x have "m2 \<Turnstile> LS x" by (auto simp: satisfies_model.rep_eq)
   }
-  ultimately show ?case using ls_sat(3) by auto *) show ?case sorry
+  ultimately show ?case using ls_sat(3) by auto
 next
   case (Eq x1 x2)
   with iso_heap_emp[OF this(1)] show ?case by transfer auto
