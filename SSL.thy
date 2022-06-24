@@ -79,7 +79,7 @@ type_synonym heap = "loc \<rightharpoonup> loc"
 text \<open>Models for SSL, cf. symbolic heap fragment.\<close>
 typedef model =
   "{(s::stack,h::heap) |s h. finite (dom s) \<and> finite (dom h) \<and> (\<exists>l. s Nil = Some l \<and> l \<notin> dom h)}"
-  \<comment> \<open>If stack or heap would be a fmap, setup_lifting would break, so we hardcode the finite domain.\<close>
+  \<comment> \<open>If stack or heap would be fmap, setup_lifting would break, so we hardcode the finite domain.\<close>
 proof -
   define m :: "(stack\<times>heap)" where "m \<equiv> ([Nil\<mapsto>0],Map.empty)"
   then have "m \<in> {(s, h) |s h. finite (dom s)  \<and> finite (dom h) \<and> (\<exists>l. s var.Nil = Some l \<and> l \<notin> dom h)}"
@@ -166,8 +166,8 @@ lift_definition satisfies_model :: "model \<Rightarrow> form \<Rightarrow> bool"
 fun weak_satisfies :: "(stack\<times>heap) \<Rightarrow> form \<Rightarrow> bool" where
   "weak_satisfies (s,h) (\<phi>1 \<^emph> \<phi>2) = 
   (\<exists>h1 h2. Some h = (weak_heap_union h1 h2) \<and> weak_satisfies (s,h1) \<phi>1 \<and> weak_satisfies (s,h2) \<phi>2)"
-| "weak_satisfies (s,h) (\<phi>1 -\<otimes> \<phi>2) = 
-  (\<exists>h1 h2. weak_satisfies (s,h1) \<phi>1 \<and> (h ++ h1) = Some h2 \<and> weak_satisfies (s,h2) \<phi>2)"
+| "weak_satisfies (s,h) (\<phi>1 -\<otimes> \<phi>2) = (\<exists>h1 h2. finite (dom h1) \<and> (\<exists>l. s Nil = Some l \<and> l \<notin> dom h1) 
+  \<and> weak_satisfies (s,h1) \<phi>1 \<and> (h ++ h1) = Some h2 \<and> weak_satisfies (s,h2) \<phi>2)"
 | "weak_satisfies (s,h) (\<phi>1 \<and>\<^sub>s \<phi>2) = (weak_satisfies (s,h) \<phi>1 \<and> weak_satisfies (s,h) \<phi>2)"
 | "weak_satisfies (s,h) (\<phi>1 \<or>\<^sub>s \<phi>2) = (weak_satisfies (s,h) \<phi>1 \<or> weak_satisfies (s,h) \<phi>2)"
 | "weak_satisfies (s,h) (\<not>\<^sub>s \<phi>) = Not (weak_satisfies (s,h) \<phi>)"
@@ -176,13 +176,13 @@ fun weak_satisfies :: "(stack\<times>heap) \<Rightarrow> form \<Rightarrow> bool
 
 lift_definition weak_satisfies_model :: "model \<Rightarrow> form \<Rightarrow> bool" (infix "\<Turnstile>\<^sub>w" 51) is weak_satisfies .
 
-lemma weak_strong_atoms: "atom P \<Longrightarrow> satisfies (s,h) P \<longleftrightarrow> weak_satisfies (s,h) P"
+theorem weak_strong_atoms: "atom P \<Longrightarrow> satisfies (s,h) P \<longleftrightarrow> weak_satisfies (s,h) P"
   by (induction P) auto
 lemma weak_strong_watom_model: "atom P \<Longrightarrow> m \<Turnstile> P \<longleftrightarrow> m \<Turnstile>\<^sub>w P"
   apply transfer' using weak_strong_atoms by fast
 
-definition ssl_sat :: "var set \<Rightarrow> form \<Rightarrow> bool" where
-  "ssl_sat x \<phi> \<equiv> \<exists>s h. x=dom s \<and> satisfies (s,h) \<phi>"
+definition ssl_sat :: "var fset \<Rightarrow> form \<Rightarrow> bool" where
+  "ssl_sat x \<phi> \<equiv> \<exists>s h. fset x=dom s \<and> fvs \<phi> |\<subseteq>| x \<and> satisfies (s,h) \<phi>"
 definition ssl_entails :: "form \<Rightarrow> var set \<Rightarrow> form \<Rightarrow> bool" ("_ \<turnstile>\<^sub>_ _") where
   "\<phi> \<turnstile>\<^sub>x \<psi> \<equiv> \<forall>s h. x=dom s \<and> satisfies (s,h) \<phi> \<longrightarrow> satisfies (s,h) \<psi>"
 
@@ -316,5 +316,72 @@ next
   case (Neg \<phi>)
   then show ?case by simp
 qed
+
+lemma positive_var_union: 
+  "\<lbrakk>weak_satisfies (s,h1) \<phi>1; weak_satisfies (s,h2) \<phi>2; positive \<phi>1; positive \<phi>2\<rbrakk> \<Longrightarrow>
+  h1++h2 \<noteq> None \<longleftrightarrow> h1 \<uplus>\<^sup>s h2 \<noteq> None"
+proof
+  assume assms: "weak_satisfies (s, h1) \<phi>1" "weak_satisfies (s, h2) \<phi>2" "positive \<phi>1" "positive \<phi>2" 
+    "h1 ++ h2 \<noteq> None"
+  {
+    fix l
+    assume l: "l \<in> locs h1 \<inter> locs h2"
+    from assms(5) have "dom h1 \<inter> dom h2 = {}" 
+      by (auto simp: weak_heap_union_def) (meson disjoint_iff domI not_Some_eq)
+    with l have "l \<in> ran h1 - dom h1 \<or> l \<in> ran h2 - dom h2" by (auto simp: locs_def)
+    with positive_var_locations[OF assms(3,1)] positive_var_locations[OF assms(4,2)] 
+    have "l \<in> ran s" by auto
+  }
+  then have "locs h1 \<inter> locs h2 \<subseteq> ran s" by auto
+  with assms(5) have "(dom h1 \<inter> ran h2) \<union> (dom h2 \<inter> ran h1) \<subseteq> ran s" by (auto simp: locs_def)
+  with assms(5) show "h1 \<uplus>\<^sup>s h2 \<noteq> None" by (simp add: heap_union_def)
+next
+  assume "h1 \<uplus>\<^sup>s h2 \<noteq> None"
+  then show "h1 ++ h2 \<noteq> None" by (auto simp: heap_union_def) (metis option.distinct(1))
+qed
+
+theorem positive_weak_strong: "positive \<phi> \<Longrightarrow> satisfies (s,h) \<phi> \<longleftrightarrow> weak_satisfies (s,h) \<phi>"
+proof (induction \<phi> arbitrary: s h)
+  case (SepConj \<phi>1 \<phi>2)
+  then have pos: "positive \<phi>1" "positive \<phi>2" by auto
+  show ?case proof 
+    assume "satisfies (s, h) (\<phi>1 \<^emph> \<phi>2)"
+    then obtain h1 h2 where h12: "Some h = (h1 \<uplus>\<^sup>s h2) \<and> satisfies (s,h1) \<phi>1 \<and> satisfies (s,h2) \<phi>2" 
+      by auto
+    then have "Some h = h1 ++ h2" apply (auto simp: heap_union_def)
+      apply (metis IntI domI option.distinct(1) subsetD)
+      by (metis IntI domI option.distinct(1) subsetD)
+    with SepConj(1)[OF pos(1)] SepConj(2)[OF pos(2)] h12 show "weak_satisfies (s, h) (\<phi>1 \<^emph> \<phi>2)"
+      by fastforce
+  next
+    assume "weak_satisfies (s, h) (\<phi>1 \<^emph> \<phi>2)"
+    then obtain h1 h2 where h12: "Some h = h1 ++ h2 \<and> weak_satisfies (s,h1) \<phi>1 
+      \<and> weak_satisfies (s,h2) \<phi>2" by auto
+    with positive_var_union pos have "Some h = h1 \<uplus>\<^sup>s h2" apply auto
+      using heap_union_def positive_var_union by presburger
+    with SepConj(1)[OF pos(1)] SepConj(2)[OF pos(2)] h12 show "satisfies (s, h) (\<phi>1 \<^emph> \<phi>2)"
+      by fastforce
+  qed
+next
+  case (Septraction \<phi>1 \<phi>2)
+  then have pos: "positive \<phi>1" "positive \<phi>2" by auto
+  show ?case proof 
+    assume "satisfies (s, h) (\<phi>1 -\<otimes> \<phi>2)"
+    then obtain h1 h2 where h12: "finite (dom h1) \<and> (\<exists>l. s Nil = Some l \<and> l \<notin> dom h1) 
+      \<and> satisfies (s,h1) \<phi>1 \<and> (h \<uplus>\<^sup>s h1) = Some h2 \<and> satisfies (s,h2) \<phi>2"
+      by auto
+    then have "Some h2 = h ++ h1" by (auto simp: heap_union_def) 
+      (metis IntI domI option.distinct(1) subsetD)  
+    with Septraction(1)[OF pos(1)] Septraction(2)[OF pos(2)] h12 
+    show "weak_satisfies (s, h) (\<phi>1 -\<otimes> \<phi>2)" by fastforce
+  next
+    assume assm: "weak_satisfies (s, h) (\<phi>1 -\<otimes> \<phi>2)"
+    then obtain h1 h2 where h12: "finite (dom h1) \<and> (\<exists>l. s Nil = Some l \<and> l \<notin> dom h1) 
+      \<and> weak_satisfies (s,h1) \<phi>1 \<and> (h ++ h1) = Some h2 \<and> weak_satisfies (s,h2) \<phi>2" by auto
+    with positive_var_union pos have "h \<uplus>\<^sup>s h1 = Some h2" by (metis Septraction(3) assm heap_union_def)   
+    with Septraction(1)[OF pos(1)] Septraction(2)[OF pos(2)] h12 show "satisfies (s, h) (\<phi>1 -\<otimes> \<phi>2)"
+      by fastforce
+  qed
+qed (simp_all)
 
 end
